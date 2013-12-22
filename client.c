@@ -56,7 +56,7 @@ void client_send(char *data) {
     }
     if (client_sendall(sd, data, strlen(data)) == -1) {
         perror("client_sendall");
-        exit(1);
+        // exit(1);
     }
 }
 
@@ -133,7 +133,8 @@ int recv_worker(void *arg) {
         char data[BUFFER_SIZE] = {0};
         if (recv(sd, data, BUFFER_SIZE - 1, 0) <= 0) {
             perror("recv");
-            exit(1);
+            // exit(1);
+            break;
         }
         while (1) {
             int done = 0;
@@ -160,7 +161,8 @@ void client_connect(char *hostname, int port) {
     struct sockaddr_in address;
     if ((host = gethostbyname(hostname)) == 0) {
         perror("gethostbyname");
-        exit(1);
+        // exit(1);
+        return;
     }
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -168,11 +170,13 @@ void client_connect(char *hostname, int port) {
     address.sin_port = htons(port);
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("socket");
-        exit(1);
+        // exit(1);
+        return;
     }
     if (connect(sd, (struct sockaddr *)&address, sizeof(address)) == -1) {
         perror("connect");
-        exit(1);
+        // exit(1);
+        return;
     }
 }
 
@@ -183,7 +187,7 @@ void client_start() {
     mtx_init(&mutex, mtx_plain);
     if (thrd_create(&recv_thread, recv_worker, NULL) != thrd_success) {
         perror("thrd_create");
-        exit(1);
+        // exit(1);
     }
 }
 
@@ -194,7 +198,7 @@ void client_stop() {
     close(sd);
     if (thrd_join(recv_thread, NULL) != thrd_success) {
         perror("thrd_join");
-        exit(1);
+        // exit(1);
     }
     mtx_destroy(&mutex);
 }

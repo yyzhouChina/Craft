@@ -8,7 +8,7 @@
 #define VSYNC 1
 #define SCROLL_THRESHOLD 0.1
 #define MAX_MESSAGES 4
-#define DB_PATH "craft.db"
+#define DB_NAME "craft"
 #define USE_CACHE 1
 #define DAY_LENGTH 300
 

@@ -35,6 +35,7 @@
 #define MAX_RECV_LENGTH 1024
 #define MAX_TEXT_LENGTH 256
 #define MAX_NAME_LENGTH 32
+#define MAX_PATH_LENGTH 1024
 #define LEFT 0
 #define CENTER 1
 #define RIGHT 2
@@ -98,6 +99,7 @@ static int ortho = 0;
 static float fov = 65;
 static int typing = 0;
 static char typing_buffer[MAX_TEXT_LENGTH] = {0};
+static char settings_path[MAX_PATH_LENGTH] = ".";
 
 int is_plant(int w) {
     return w > 16;
@@ -896,6 +898,34 @@ void render_text(
     del_buffer(buffer);
 }
 
+void init_local(char *db_name) {
+    client_stop();
+    client_disable();
+    db_close();
+    db_disable();
+    char path[MAX_PATH_LENGTH];
+    snprintf(path, MAX_PATH_LENGTH, "%s/%s.db", settings_path, db_name);
+    db_enable();
+    db_init(path);
+}
+
+void init_remote(char *hostname, int port) {
+    client_stop();
+    client_disable();
+    db_close();
+    db_disable();
+    if (USE_CACHE) {
+        char path[MAX_PATH_LENGTH];
+        snprintf(path, MAX_PATH_LENGTH, "%s/cache.%s.%d.db",
+            settings_path, hostname, port);
+        db_enable();
+        db_init(path);
+    }
+    client_enable();
+    client_connect(hostname, port);
+    client_start();
+}
+
 void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (action == GLFW_RELEASE) {
         return;
@@ -923,7 +953,13 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ENTER) {
         if (typing) {
             typing = 0;
-            client_talk(typing_buffer);
+            char file_name[MAX_TEXT_LENGTH];
+            if (sscanf(typing_buffer, "/file %[a-zA-Z0-9]", file_name) == 1) {
+                init_local(file_name);
+            }
+            else {
+                client_talk(typing_buffer);
+            }
         }
         else {
             if (mods & GLFW_MOD_SUPER) {
@@ -1051,13 +1087,12 @@ int main(int argc, char **argv) {
     #else
         chdir(dirname(argv[0]));
     #endif
-    char settings_path[1024] = ".";
     #ifdef __APPLE__
         FSRef ref;
         FSFindFolder(
             kUserDomain, kApplicationSupportFolderType, kCreateFolder, &ref);
-        FSRefMakePath(&ref, settings_path, 1024);
-        strncat(settings_path, "/Craft", 1024);
+        FSRefMakePath(&ref, settings_path, MAX_PATH_LENGTH);
+        strncat(settings_path, "/Craft", MAX_PATH_LENGTH);
         mkdir(settings_path, S_IRWXU);
     #endif
     srand(time(NULL));
@@ -1068,26 +1103,10 @@ int main(int argc, char **argv) {
         if (argc == 3) {
             port = atoi(argv[2]);
         }
-        if (USE_CACHE) {
-            char path[1024];
-            snprintf(path, 1024, "%s/cache.%s.%d.db",
-                settings_path, hostname, port);
-            db_enable();
-            if (db_init(path)) {
-                return -1;
-            }
-        }
-        client_enable();
-        client_connect(hostname, port);
-        client_start();
+        init_remote(hostname, port);
     }
     else {
-        char path[1024];
-        snprintf(path, 1024, "%s/%s", settings_path, DB_PATH);
-        db_enable();
-        if (db_init(path)) {
-            return -1;
-        }
+        init_local(DB_NAME);
     }
     if (!glfwInit()) {
         return -1;
