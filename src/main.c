@@ -801,30 +801,100 @@ void gen_sign_buffer(Chunk *chunk) {
 }
 
 void occlusion(char neighbors[27], float result[6][4]) {
-    static const int lookup[6][4][3] = {
-        {{0, 1, 3}, {2, 1, 5}, {6, 3, 7}, {8, 5, 7}},
-        {{18, 19, 21}, {20, 19, 23}, {24, 21, 25}, {26, 23, 25}},
-        {{6, 7, 15}, {8, 7, 17}, {24, 15, 25}, {26, 17, 25}},
-        {{0, 1, 9}, {2, 1, 11}, {18, 9, 19}, {20, 11, 19}},
-        {{0, 3, 9}, {6, 3, 15}, {18, 9, 21}, {24, 15, 21}},
-        {{2, 5, 11}, {8, 5, 17}, {20, 11, 23}, {26, 17, 23}}
+    static const int lookup[6][4][4] = {
+        {{0, 1, 3, 4}, {1, 2, 4, 5}, {3, 4, 6, 7}, {4, 5, 7, 8}},
+        {{18, 19, 21, 22}, {19, 20, 22, 23}, {21, 22, 24, 25}, {22, 23, 25, 26}},
+        {{6, 7, 15, 16}, {7, 8, 16, 17}, {15, 16, 24, 25}, {16, 17, 25, 26}},
+        {{0, 1, 9, 10}, {1, 2, 10, 11}, {9, 10, 18, 19}, {10, 11, 19, 20}},
+        {{0, 3, 9, 12}, {3, 6, 12, 15}, {9, 12, 18, 21}, {12, 15, 21, 24}},
+        {{2, 5, 11, 14}, {5, 8, 14, 17}, {11, 14, 20, 23}, {14, 17, 23, 26}}
     };
-    static const float curve[4] = {0.0, 0.5, 0.75, 1.0};
+    static const float curve[16] = {
+        0.9648, 0.9560, 0.9450, 0.9313,
+        0.9141, 0.8926, 0.8658, 0.8322,
+        0.7903, 0.7379, 0.6723, 0.5904,
+        0.4880, 0.3600, 0.2000, 0.0000};
     for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 4; j++) {
-            int corner = neighbors[lookup[i][j][0]];
-            int side1 = neighbors[lookup[i][j][1]];
-            int side2 = neighbors[lookup[i][j][2]];
-            int value = side1 && side2 ? 3 : corner + side1 + side2;
-            result[i][j] = curve[value];
+            float total = 0;
+            for (int k = 0; k < 4; k++) {
+                total += curve[neighbors[lookup[i][j][k]]];
+            }
+            result[i][j] = total / 4.0;
+        }
+    }
+}
+
+void _ambient(
+    char result[CHUNK_SIZE + 2][258][CHUNK_SIZE + 2],
+    char blocks[CHUNK_SIZE + 2][258][CHUNK_SIZE + 2],
+    int mask, int x, int y, int z, int value)
+{
+    if (x < 0 || y < 0 || z < 0) {
+        return;
+    }
+    if (x >= CHUNK_SIZE + 2 || y >= 258 || z >= CHUNK_SIZE + 2) {
+        return;
+    }
+    int force = value < 0;
+    if (force) {
+        value = result[x][y][z];
+    }
+    if (!is_transparent(blocks[x][y][z])) {
+        value = 0;
+    }
+    if (!force && result[x][y][z] >= value) {
+        return;
+    }
+    result[x][y][z] = value;
+    if (value == 0) {
+        return;
+    }
+    if (mask & 1) {
+        _ambient(result, blocks, mask, x, y - 1, z, value);
+    }
+    if (mask & 2) {
+        _ambient(result, blocks, mask, x, y + 1, z, value);
+    }
+    if (mask & 4) {
+        _ambient(result, blocks, mask, x - 1, y, z, value - 1);
+    }
+    if (mask & 8) {
+        _ambient(result, blocks, mask, x + 1, y, z, value - 1);
+    }
+    if (mask & 16) {
+        _ambient(result, blocks, mask, x, y, z - 1, value - 1);
+    }
+    if (mask & 32) {
+        _ambient(result, blocks, mask, x, y, z + 1, value - 1);
+    }
+    return;
+}
+
+void ambient(
+    char result[CHUNK_SIZE + 2][258][CHUNK_SIZE + 2],
+    char blocks[CHUNK_SIZE + 2][258][CHUNK_SIZE + 2])
+{
+    for (int x = 0; x < CHUNK_SIZE + 2; x++) {
+        for (int z = 0; z < CHUNK_SIZE + 2; z++) {
+            _ambient(result, blocks, 1, x, 257, z, 15);
+        }
+    }
+    for (int y = 0; y < 258; y++) {
+        for (int x = 0; x < CHUNK_SIZE + 2; x++) {
+            for (int z = 0; z < CHUNK_SIZE + 2; z++) {
+                _ambient(result, blocks, 63, x, y, z, -1);
+            }
         }
     }
 }
 
 void gen_chunk_buffer(Chunk *chunk) {
     static char blocks[CHUNK_SIZE + 2][258][CHUNK_SIZE + 2];
+    static char light[CHUNK_SIZE + 2][258][CHUNK_SIZE + 2];
     static char neighbors[27];
     memset(blocks, 0, sizeof(blocks));
+    memset(light, 0, sizeof(light));
     memset(neighbors, 0, sizeof(neighbors));
     int ox = chunk->p * CHUNK_SIZE - 1;
     int oy = -1;
@@ -849,6 +919,8 @@ void gen_chunk_buffer(Chunk *chunk) {
         // END TODO
         blocks[x][y][z] = e->w;
     } END_MAP_FOR_EACH;
+
+    ambient(light, blocks);
 
     // second pass - count exposed faces
     int faces = 0;
@@ -908,8 +980,7 @@ void gen_chunk_buffer(Chunk *chunk) {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dy = -1; dy <= 1; dy++) {
                     for (int dz = -1; dz <= 1; dz++) {
-                        int w = blocks[x + dx][y + dy][z + dz];
-                        neighbors[index++] = !is_transparent(w);
+                        neighbors[index++] = light[x + dx][y + dy][z + dz];
                     }
                 }
             }
