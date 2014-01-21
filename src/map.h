@@ -13,10 +13,10 @@
 #define END_MAP_FOR_EACH }
 
 typedef struct {
-    int x;
-    int y;
-    int z;
-    int w;
+    unsigned char x;
+    unsigned char y;
+    unsigned char z;
+    char w;
 } MapEntry;
 
 typedef struct {

@@ -1,4 +1,5 @@
 #include <string.h>
+#include "config.h"
 #include "db.h"
 #include "ring.h"
 #include "sqlite3.h"
@@ -360,6 +361,8 @@ void db_load_map(Map *map, int p, int q) {
     if (!db_enabled) {
         return;
     }
+    int dx = p * CHUNK_SIZE - 1;
+    int dz = q * CHUNK_SIZE - 1;
     sqlite3_reset(load_map_stmt);
     sqlite3_bind_int(load_map_stmt, 1, p);
     sqlite3_bind_int(load_map_stmt, 2, q);
@@ -368,7 +371,7 @@ void db_load_map(Map *map, int p, int q) {
         int y = sqlite3_column_int(load_map_stmt, 1);
         int z = sqlite3_column_int(load_map_stmt, 2);
         int w = sqlite3_column_int(load_map_stmt, 3);
-        map_set(map, x, y, z, w);
+        map_set(map, x - dx, y, z - dz, w);
     }
 }
 

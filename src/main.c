@@ -548,11 +548,13 @@ int highest_block(float x, float z) {
     int nz = roundf(z);
     int p = chunked(x);
     int q = chunked(z);
+    int dx = p * CHUNK_SIZE - 1;
+    int dz = q * CHUNK_SIZE - 1;
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
         MAP_FOR_EACH(map, e) {
-            if (is_obstacle(e->w) && e->x == nx && e->z == nz) {
+            if (is_obstacle(e->w) && e->x + dx == nx && e->z + dz == nz) {
                 result = MAX(result, e->y);
             }
         } END_MAP_FOR_EACH;
@@ -561,11 +563,14 @@ int highest_block(float x, float z) {
 }
 
 int _hit_test(
-    Map *map, float max_distance, int previous,
+    Chunk *chunk, float max_distance, int previous,
     float x, float y, float z,
     float vx, float vy, float vz,
     int *hx, int *hy, int *hz)
 {
+    Map *map = &chunk->map;
+    int dx = chunk->p * CHUNK_SIZE - 1;
+    int dz = chunk->q * CHUNK_SIZE - 1;
     int m = 32;
     int px = 0;
     int py = 0;
@@ -575,7 +580,7 @@ int _hit_test(
         int ny = roundf(y);
         int nz = roundf(z);
         if (nx != px || ny != py || nz != pz) {
-            int hw = map_get(map, nx, ny, nz);
+            int hw = map_get(map, nx - dx, ny, nz - dz);
             if (hw > 0) {
                 if (previous) {
                     *hx = px; *hy = py; *hz = pz;
@@ -608,7 +613,7 @@ int hit_test(
             continue;
         }
         int hx, hy, hz;
-        int hw = _hit_test(&chunk->map, 8, previous,
+        int hw = _hit_test(chunk, 8, previous,
             x, y, z, vx, vy, vz, &hx, &hy, &hz);
         if (hw > 0) {
             float d = sqrtf(
@@ -660,6 +665,8 @@ int collide(int height, float *x, float *y, float *z) {
     int result = 0;
     int p = chunked(*x);
     int q = chunked(*z);
+    int dx = p * CHUNK_SIZE - 1;
+    int dz = q * CHUNK_SIZE - 1;
     Chunk *chunk = find_chunk(p, q);
     if (!chunk) {
         return result;
@@ -673,24 +680,24 @@ int collide(int height, float *x, float *y, float *z) {
     float pz = *z - nz;
     float pad = 0.25;
     for (int dy = 0; dy < height; dy++) {
-        if (px < -pad && is_obstacle(map_get(map, nx - 1, ny - dy, nz))) {
+        if (px < -pad && is_obstacle(map_get(map, nx - dx - 1, ny - dy, nz - dz))) {
             *x = nx - pad;
         }
-        if (px > pad && is_obstacle(map_get(map, nx + 1, ny - dy, nz))) {
+        if (px > pad && is_obstacle(map_get(map, nx - dx + 1, ny - dy, nz - dz))) {
             *x = nx + pad;
         }
-        if (py < -pad && is_obstacle(map_get(map, nx, ny - dy - 1, nz))) {
+        if (py < -pad && is_obstacle(map_get(map, nx - dx, ny - dy - 1, nz - dz))) {
             *y = ny - pad;
             result = 1;
         }
-        if (py > pad && is_obstacle(map_get(map, nx, ny - dy + 1, nz))) {
+        if (py > pad && is_obstacle(map_get(map, nx - dx, ny - dy + 1, nz - dz))) {
             *y = ny + pad;
             result = 1;
         }
-        if (pz < -pad && is_obstacle(map_get(map, nx, ny - dy, nz - 1))) {
+        if (pz < -pad && is_obstacle(map_get(map, nx - dx, ny - dy, nz - 1 - dz))) {
             *z = nz - pad;
         }
-        if (pz > pad && is_obstacle(map_get(map, nx, ny - dy, nz + 1))) {
+        if (pz > pad && is_obstacle(map_get(map, nx - dx, ny - dy, nz + 1 - dz))) {
             *z = nz + pad;
         }
     }
@@ -834,11 +841,14 @@ void gen_chunk_buffer(Chunk *chunk) {
     chunk->miny = 256;
     chunk->maxy = 0;
 
+    int dx = chunk->p * CHUNK_SIZE - 1;
+    int dz = chunk->q * CHUNK_SIZE - 1;
+
     // first pass - populate blocks array
     MAP_FOR_EACH(map, e) {
-        int x = e->x - ox;
+        int x = e->x - ox + dx;
         int y = e->y - oy;
-        int z = e->z - oz;
+        int z = e->z - oz + dz;
         // TODO: this should be unnecessary
         if (x < 0 || y < 0 || z < 0) {
             continue;
@@ -856,9 +866,9 @@ void gen_chunk_buffer(Chunk *chunk) {
         if (e->w <= 0) {
             continue;
         }
-        int x = e->x - ox;
+        int x = e->x - ox + dx;
         int y = e->y - oy;
-        int z = e->z - oz;
+        int z = e->z - oz + dz;
         int f1 = is_transparent(blocks[x - 1][y][z]);
         int f2 = is_transparent(blocks[x + 1][y][z]);
         int f3 = is_transparent(blocks[x][y + 1][z]);
@@ -879,9 +889,9 @@ void gen_chunk_buffer(Chunk *chunk) {
         if (e->w <= 0) {
             continue;
         }
-        int x = e->x - ox;
+        int x = e->x - ox + dx;
         int y = e->y - oy;
-        int z = e->z - oz;
+        int z = e->z - oz + dz;
         int f1 = is_transparent(blocks[x - 1][y][z]);
         int f2 = is_transparent(blocks[x + 1][y][z]);
         int f3 = is_transparent(blocks[x][y + 1][z]);
@@ -898,10 +908,10 @@ void gen_chunk_buffer(Chunk *chunk) {
         chunk->miny = MIN(chunk->miny, e->y);
         chunk->maxy = MAX(chunk->maxy, e->y);
         if (is_plant(e->w)) {
-            float rotation = simplex2(e->x, e->z, 4, 0.5, 2) * 360;
+            float rotation = simplex2(e->x + dx, e->z + dz, 4, 0.5, 2) * 360;
             make_plant(
                 data + offset,
-                e->x, e->y, e->z, 0.5, e->w, rotation);
+                e->x + dx, e->y, e->z + dz, 0.5, e->w, rotation);
         }
         else {
             int index = 0;
@@ -918,7 +928,7 @@ void gen_chunk_buffer(Chunk *chunk) {
             make_cube(
                 data + offset, ao,
                 f1, f2, f3, f4, f5, f6,
-                e->x, e->y, e->z, 0.5, e->w);
+                e->x + dx, e->y, e->z + dz, 0.5, e->w);
         }
         offset += total * 54;
     } END_MAP_FOR_EACH;
@@ -933,8 +943,11 @@ void gen_chunk_buffer(Chunk *chunk) {
 }
 
 void map_set_func(int x, int y, int z, int w, void *arg) {
-    Map *map = (Map *)arg;
-    map_set(map, x, y, z, w);
+    Chunk *chunk = (Chunk *)arg;
+    Map *map = &chunk->map;
+    int dx = chunk->p * CHUNK_SIZE - 1;
+    int dz = chunk->q * CHUNK_SIZE - 1;
+    map_set(map, x - dx, y, z - dz, w);
 }
 
 void create_chunk(Chunk *chunk, int p, int q) {
@@ -949,7 +962,7 @@ void create_chunk(Chunk *chunk, int p, int q) {
     SignList *signs = &chunk->signs;
     map_alloc(map);
     sign_list_alloc(signs, 16);
-    create_world(p, q, map_set_func, map);
+    create_world(p, q, map_set_func, chunk);
     db_load_map(map, p, q);
     db_load_signs(signs, p, q);
     gen_chunk_buffer(chunk);
@@ -1128,10 +1141,12 @@ void set_sign(int x, int y, int z, int face, const char *text) {
 }
 
 void _set_block(int p, int q, int x, int y, int z, int w, int dirty) {
+    int dx = p * CHUNK_SIZE - 1;
+    int dz = q * CHUNK_SIZE - 1;
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
-        if (map_set(map, x, y, z, w)) {
+        if (map_set(map, x - dx, y, z - dz, w)) {
             if (dirty) {
                 chunk->dirty = 1;
             }
@@ -1178,10 +1193,12 @@ void record_block(int x, int y, int z, int w) {
 int get_block(int x, int y, int z) {
     int p = chunked(x);
     int q = chunked(z);
+    int dx = p * CHUNK_SIZE - 1;
+    int dz = q * CHUNK_SIZE - 1;
     Chunk *chunk = find_chunk(p, q);
     if (chunk) {
         Map *map = &chunk->map;
-        return map_get(map, x, y, z);
+        return map_get(map, x - dx, y, z - dz);
     }
     return 0;
 }
@@ -2461,6 +2478,23 @@ int main(int argc, char **argv) {
                 g->mode_changed = 0;
                 break;
             }
+        }
+
+        for (int i = 0; i < g->chunk_count; i++) {
+            Chunk *chunk = g->chunks + i;
+            Map *map = &chunk->map;
+            int minx, maxx, miny, maxy, minz, maxz;
+            minx = miny = minz = 1000000;
+            maxx = maxy = maxz = -1000000;
+            MAP_FOR_EACH(map, e) {
+                minx = MIN(minx, e->x);
+                miny = MIN(miny, e->y);
+                minz = MIN(minz, e->z);
+                maxx = MAX(maxx, e->x);
+                maxy = MAX(maxy, e->y);
+                maxz = MAX(maxz, e->z);
+            } END_MAP_FOR_EACH;
+            printf("%d, %d, %d, %d, %d, %d\n", minx, maxx, miny, maxy, minz, maxz);
         }
 
         // SHUTDOWN //
