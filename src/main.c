@@ -815,7 +815,7 @@ void occlusion(char neighbors[27], float result[6][4]) {
             for (int k = 0; k < 4; k++) {
                 total += neighbors[lookup[i][j][k]];
             }
-            result[i][j] = 1.0 - total / 64.0;
+            result[i][j] = 1.0 - powf(0.8, 15.0 - total / 4.0);
         }
     }
 }
