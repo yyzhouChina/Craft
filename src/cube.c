@@ -97,7 +97,7 @@ void make_cube(
 }
 
 void make_plant(
-    float *data,
+    float *data, float ao,
     float px, float py, float pz, float n, int w, float rotation)
 {
     static const float positions[4][4][3] = {
@@ -141,7 +141,7 @@ void make_plant(
             *(d++) = normals[i][2];
             *(d++) = du + (uvs[i][j][0] ? b : a);
             *(d++) = dv + (uvs[i][j][1] ? b : a);
-            *(d++) = 0;
+            *(d++) = ao;
         }
     }
     float ma[16];

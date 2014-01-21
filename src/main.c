@@ -233,7 +233,7 @@ GLuint gen_cube_buffer(float x, float y, float z, float n, int w) {
 
 GLuint gen_plant_buffer(float x, float y, float z, float n, int w) {
     GLfloat *data = malloc_faces(9, 4);
-    make_plant(data, x, y, z, n, w, 45);
+    make_plant(data, 0, x, y, z, n, w, 45);
     return gen_faces(9, 4, data);
 }
 
@@ -809,18 +809,13 @@ void occlusion(char neighbors[27], float result[6][4]) {
         {{0, 3, 9, 12}, {3, 6, 12, 15}, {9, 12, 18, 21}, {12, 15, 21, 24}},
         {{2, 5, 11, 14}, {5, 8, 14, 17}, {11, 14, 20, 23}, {14, 17, 23, 26}}
     };
-    static const float curve[16] = {
-        0.9648, 0.9560, 0.9450, 0.9313,
-        0.9141, 0.8926, 0.8658, 0.8322,
-        0.7903, 0.7379, 0.6723, 0.5904,
-        0.4880, 0.3600, 0.2000, 0.0000};
     for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 4; j++) {
             float total = 0;
             for (int k = 0; k < 4; k++) {
-                total += curve[neighbors[lookup[i][j][k]]];
+                total += neighbors[lookup[i][j][k]];
             }
-            result[i][j] = total / 4.0;
+            result[i][j] = 1.0 - total / 64.0;
         }
     }
 }
@@ -969,21 +964,22 @@ void gen_chunk_buffer(Chunk *chunk) {
         }
         chunk->miny = MIN(chunk->miny, e->y);
         chunk->maxy = MAX(chunk->maxy, e->y);
+        int index = 0;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    neighbors[index++] = light[x + dx][y + dy][z + dz];
+                }
+            }
+        }
         if (is_plant(e->w)) {
             float rotation = simplex2(e->x, e->z, 4, 0.5, 2) * 360;
+            float ao = 1.0 - neighbors[13] / 16.0;
             make_plant(
-                data + offset,
+                data + offset, ao,
                 e->x, e->y, e->z, 0.5, e->w, rotation);
         }
         else {
-            int index = 0;
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        neighbors[index++] = light[x + dx][y + dy][z + dz];
-                    }
-                }
-            }
             float ao[6][4];
             occlusion(neighbors, ao);
             make_cube(
