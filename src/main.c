@@ -835,7 +835,8 @@ void _ambient(
     if (force) {
         value = result[x][y][z];
     }
-    if (!is_transparent(blocks[x][y][z])) {
+    int w = blocks[x][y][z];
+    if (w != 16 && !is_transparent(w)) {
         value = 0;
     }
     if (!force && result[x][y][z] >= value) {
